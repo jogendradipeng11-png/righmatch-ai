@@ -17,6 +17,7 @@ import {
   Info,
   X,
   ExternalLink,
+  Edit3,
 } from 'lucide-react';
 import { CandidateDocument, DocumentCategory, UserResumeProfile } from '../types';
 import { formatBytes, generateSyntheticPdfBase64 } from '../lib/documentVault';
@@ -47,6 +48,25 @@ export const DocumentsVaultView: React.FC<DocumentsVaultViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<CandidateDocument | null>(null);
+
+  // In-app Delete Confirmation State
+  const [docToDelete, setDocToDelete] = useState<CandidateDocument | null>(null);
+
+  // Edit / Update Modal State
+  const [editingDoc, setEditingDoc] = useState<CandidateDocument | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCategory, setEditCategory] = useState<DocumentCategory>('offshore_safety');
+  const [editIssuer, setEditIssuer] = useState('');
+  const [editExpiry, setEditExpiry] = useState('');
+  const [editAttachByDefault, setEditAttachByDefault] = useState(true);
+  const [editFile, setEditFile] = useState<{
+    name: string;
+    size: number;
+    type: string;
+    base64: string;
+  } | null>(null);
+  const [editError, setEditError] = useState('');
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   // Upload Form State
   const [newTitle, setNewTitle] = useState('');
@@ -84,11 +104,93 @@ export const DocumentsVaultView: React.FC<DocumentsVaultViewProps> = ({
     onUpdateDocuments(updated);
   };
 
-  const handleDeleteDoc = (id: string) => {
-    if (confirm('Are you sure you want to remove this document from your vault?')) {
-      const updated = documents.filter((d) => d.id !== id);
-      onUpdateDocuments(updated);
+  const handleAttachAll = (attach: boolean) => {
+    const updated = documents.map((doc) => ({
+      ...doc,
+      includeInApplications: attach,
+    }));
+    onUpdateDocuments(updated);
+  };
+
+  const handleRequestDelete = (doc: CandidateDocument) => {
+    setDocToDelete(doc);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!docToDelete) return;
+    const updated = documents.filter((d) => d.id !== docToDelete.id);
+    onUpdateDocuments(updated);
+    setDocToDelete(null);
+  };
+
+  const handleOpenEdit = (doc: CandidateDocument) => {
+    setEditingDoc(doc);
+    setEditTitle(doc.name);
+    setEditCategory(doc.category);
+    setEditIssuer(doc.issuer || '');
+    setEditExpiry(doc.expiryDate || '');
+    setEditAttachByDefault(doc.includeInApplications);
+    setEditFile(null);
+    setEditError('');
+  };
+
+  const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditError('');
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 15 * 1024 * 1024) {
+      setEditError('File size exceeds 15 MB limit. Please select a smaller PDF or image.');
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      setEditFile({
+        name: file.name,
+        size: file.size,
+        type: file.type || 'application/pdf',
+        base64,
+      });
+    };
+    reader.onerror = () => {
+      setEditError('Failed to read updated file.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingDoc) return;
+    if (!editTitle.trim()) {
+      setEditError('Document title is required.');
+      return;
+    }
+
+    const filename = editFile
+      ? editFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      : editingDoc.filename;
+
+    const base64Data = editFile ? editFile.base64 : editingDoc.base64Data;
+    const fileSizeBytes = editFile ? editFile.size : editingDoc.fileSizeBytes;
+    const fileType = editFile ? editFile.type : editingDoc.fileType;
+
+    const updatedDoc: CandidateDocument = {
+      ...editingDoc,
+      name: editTitle.trim(),
+      filename,
+      category: editCategory,
+      issuer: editIssuer.trim() || undefined,
+      expiryDate: editExpiry.trim() || undefined,
+      includeInApplications: editAttachByDefault,
+      base64Data,
+      fileSizeBytes,
+      fileType,
+    };
+
+    const updatedList = documents.map((d) => (d.id === editingDoc.id ? updatedDoc : d));
+    onUpdateDocuments(updatedList);
+    setEditingDoc(null);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -214,6 +316,23 @@ export const DocumentsVaultView: React.FC<DocumentsVaultViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => handleAttachAll(true)}
+            className="inline-flex items-center px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 hover:text-emerald-200 text-xs font-semibold border border-slate-700 transition"
+            title="Attach all documents to outgoing applications"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-400" />
+            Attach All ({documents.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAttachAll(false)}
+            className="inline-flex items-center px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs font-semibold border border-slate-700 transition"
+            title="Detach all documents from outgoing applications"
+          >
+            Detach All
+          </button>
           <button
             onClick={() => setShowUploadModal(true)}
             className="inline-flex items-center px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition shadow-sm"
@@ -428,6 +547,16 @@ export const DocumentsVaultView: React.FC<DocumentsVaultViewProps> = ({
                 <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
                   <div className="flex items-center space-x-1.5">
                     <button
+                      type="button"
+                      onClick={() => handleOpenEdit(doc)}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white transition text-xs flex items-center border border-amber-500/20"
+                      title="Edit / Update Document"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 mr-1" />
+                      <span className="text-[11px]">Edit</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setPreviewDoc(doc)}
                       className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition text-xs flex items-center"
                       title="Preview Document Details"
@@ -436,6 +565,7 @@ export const DocumentsVaultView: React.FC<DocumentsVaultViewProps> = ({
                       <span className="text-[11px]">Preview</span>
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleDownload(doc)}
                       className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition text-xs flex items-center"
                       title="Download PDF payload"
@@ -446,7 +576,8 @@ export const DocumentsVaultView: React.FC<DocumentsVaultViewProps> = ({
                   </div>
 
                   <button
-                    onClick={() => handleDeleteDoc(doc.id)}
+                    type="button"
+                    onClick={() => handleRequestDelete(doc)}
                     className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 transition"
                     title="Delete Document"
                   >
@@ -736,6 +867,217 @@ export const DocumentsVaultView: React.FC<DocumentsVaultViewProps> = ({
                 className="px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit / Update Document Modal */}
+      {editingDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center space-x-2">
+                <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
+                  <Edit3 className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="font-bold text-base text-white">Edit Document & Credentials</h3>
+                  <p className="text-[11px] text-slate-400">Update title, category, expiry, or upload a new file version</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingDoc(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 py-4">
+              {/* Document Title */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Document Title <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="e.g. OPITO BOSIET Certificate (2026)"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/60"
+                />
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Credential Category
+                </label>
+                <select
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value as DocumentCategory)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/60"
+                >
+                  <option value="offshore_safety">Offshore Safety (BOSIET, HUET, FOET, CA-EBS)</option>
+                  <option value="resume">Curriculum Vitae (CV) / Master Resume</option>
+                  <option value="passport_seaman_book">Passport & Continuous Discharge Certificate (CDC)</option>
+                  <option value="trade_diploma">Trade Test, B.Tech / Diploma in Mechanical</option>
+                  <option value="medical_vaccination">Offshore Medical Fitness (OGUK / OEUK, Yellow Fever)</option>
+                  <option value="other">Other Oil & Gas Credential</option>
+                </select>
+              </div>
+
+              {/* Issuer & Expiry */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Issuing Authority / Center
+                  </label>
+                  <input
+                    type="text"
+                    value={editIssuer}
+                    onChange={(e) => setEditIssuer(e.target.value)}
+                    placeholder="e.g. OPITO Mumbai, Shelf Drilling"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/60"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Expiry Date (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={editExpiry}
+                    onChange={(e) => setEditExpiry(e.target.value)}
+                    placeholder="e.g. 2028-10-15"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/60"
+                  />
+                </div>
+              </div>
+
+              {/* Replace / Update File (Optional) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Update / Replace File (Optional)
+                </label>
+                <div
+                  onClick={() => editFileInputRef.current?.click()}
+                  className="border-2 border-dashed border-slate-700 hover:border-amber-500/60 rounded-xl p-4 text-center cursor-pointer bg-slate-950/50 transition group"
+                >
+                  <input
+                    ref={editFileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    onChange={handleEditFileChange}
+                    className="hidden"
+                  />
+                  <Upload className="w-6 h-6 text-slate-500 group-hover:text-amber-400 mx-auto mb-1.5 transition" />
+                  {editFile ? (
+                    <div>
+                      <div className="text-xs font-bold text-emerald-400 flex items-center justify-center">
+                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                        {editFile.name} (New file chosen)
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        {formatBytes(editFile.size)} • Click to choose a different file
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="text-xs text-slate-300">
+                        Current file: <span className="font-mono text-amber-400">{editingDoc.filename}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-1">
+                        Click here if you want to upload a new PDF or scan to replace it
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Attach by default toggle */}
+              <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center">
+                    <Paperclip className="w-3.5 h-3.5 mr-1 text-amber-400" />
+                    Attach by default to job company emails
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Automatically attached when submitting applications
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={editAttachByDefault}
+                  onChange={(e) => setEditAttachByDefault(e.target.checked)}
+                  className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 focus:ring-offset-slate-950"
+                />
+              </div>
+
+              {editError && (
+                <div className="text-xs text-rose-400 bg-rose-950/50 border border-rose-900/50 p-2.5 rounded-lg flex items-center">
+                  <AlertCircle className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+                  {editError}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setEditingDoc(null)}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition shadow-sm"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {docToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-rose-900/50 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl">
+            <div className="flex items-start space-x-3">
+              <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-white">Delete Document?</h3>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Are you sure you want to permanently remove <strong className="text-white">{docToDelete.name}</strong> ({docToDelete.filename}) from your vault?
+                </p>
+                <div className="mt-2 text-[11px] text-rose-400 bg-rose-950/40 p-2 rounded-lg border border-rose-900/40">
+                  This document will no longer be attached to outgoing contractor applications.
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-4 mt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDocToDelete(null)}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-sm"
+              >
+                Yes, Delete Document
               </button>
             </div>
           </div>
