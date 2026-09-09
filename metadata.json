@@ -1,0 +1,6 @@
+{
+  "name": "RigMatch AI - Oil & Gas Job Auto-Apply",
+  "description": "Automated worldwide Oil & Gas job crawler and multi-site auto-apply platform across LinkedIn, Rigzone, Oil and Gas Job Search, and direct drilling contractor portals with AI profile matching, tailored resume dispatch, and approval notifications.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
