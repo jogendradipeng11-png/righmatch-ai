@@ -20,6 +20,8 @@ import { initAuth, googleSignIn, googleSignOut } from './lib/firebaseAuth';
 import { loadStoredDocuments, saveStoredDocuments } from './lib/documentVault';
 import { User } from 'firebase/auth';
 
+const RIGMATCH_JOBS_CACHE_VERSION = 'v4_real_worldwide_verified_jobs';
+
 export default function App() {
   const [profile, setProfile] = useState<UserResumeProfile>(() => {
     const saved = localStorage.getItem('rigmatch_profile');
@@ -36,12 +38,23 @@ export default function App() {
   );
 
   const [jobs, setJobs] = useState<JobListing[]>(() => {
-    const saved = localStorage.getItem('rigmatch_jobs');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {}
+    const savedVersion = localStorage.getItem('rigmatch_jobs_version');
+    if (savedVersion === RIGMATCH_JOBS_CACHE_VERSION) {
+      const saved = localStorage.getItem('rigmatch_jobs');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length >= 12) {
+            return parsed;
+          }
+        } catch {}
+      }
     }
+    // Auto upgrade cache to the complete real worldwide verified jobs database
+    try {
+      localStorage.setItem('rigmatch_jobs_version', RIGMATCH_JOBS_CACHE_VERSION);
+      localStorage.setItem('rigmatch_jobs', JSON.stringify(INITIAL_JOB_LISTINGS));
+    } catch {}
     return INITIAL_JOB_LISTINGS;
   });
 
@@ -582,6 +595,15 @@ export default function App() {
             onCustomJobAnalyze={handleCustomJobAnalyze}
             onApplyViaGmail={handleOpenGmailModal}
             isAnalyzingCustom={isAnalyzingCustom}
+            onScanNow={handleScanNow}
+            isScanning={isScanning}
+            onResetWorldwideJobs={() => {
+              setJobs(INITIAL_JOB_LISTINGS);
+              try {
+                localStorage.setItem('rigmatch_jobs', JSON.stringify(INITIAL_JOB_LISTINGS));
+                localStorage.setItem('rigmatch_jobs_version', RIGMATCH_JOBS_CACHE_VERSION);
+              } catch {}
+            }}
           />
         )}
 

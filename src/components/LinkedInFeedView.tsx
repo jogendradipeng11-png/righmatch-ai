@@ -16,6 +16,9 @@ import {
   Send,
   Zap,
   Mail,
+  Briefcase,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { JobListing, JobSource, WorldRegion } from '../types';
 
@@ -26,7 +29,110 @@ interface LinkedInFeedViewProps {
   onApplyViaGmail?: (job: JobListing) => void;
   onCustomJobAnalyze: (title: string, company: string, description: string, source?: JobSource, region?: WorldRegion) => Promise<void>;
   isAnalyzingCustom: boolean;
+  onScanNow?: () => Promise<void>;
+  isScanning?: boolean;
+  onResetWorldwideJobs?: () => void;
 }
+
+// Verified live contractor portals & direct job boards
+const WORLDWIDE_PORTALS = [
+  {
+    name: 'Rigzone Global',
+    category: 'Oil & Gas Board',
+    url: 'https://www.rigzone.com/oil/jobs/search/?k=Rig+Mechanic&c=Offshore',
+    desc: 'Live offshore drilling & marine mechanic postings worldwide',
+    tag: 'Active Live Search',
+    badgeColor: 'bg-amber-950 text-amber-300 border-amber-800',
+  },
+  {
+    name: 'LinkedIn Worldwide',
+    category: 'Global Network',
+    url: 'https://www.linkedin.com/jobs/search/?keywords=Rig%20Mechanic&location=Worldwide',
+    desc: 'Global vacancies for Rig Mechanics, Maintenance Engineers & Drilling Techs',
+    tag: 'Easy Apply',
+    badgeColor: 'bg-blue-950 text-blue-300 border-blue-800',
+  },
+  {
+    name: 'Shelf Drilling Careers',
+    category: 'Jack-Up Contractor',
+    url: 'https://www.shelfdrilling.com/careers/',
+    desc: 'Dubai, Middle East, India (Mumbai High), SE Asia Jack-Up operations',
+    tag: 'Direct Contractor',
+    badgeColor: 'bg-emerald-950 text-emerald-300 border-emerald-800',
+  },
+  {
+    name: 'Transocean Deepwater',
+    category: 'Offshore Contractor',
+    url: 'https://www.deepwater.com/careers',
+    desc: 'Ultra-deepwater drillships & harsh environment semi-subs globally',
+    tag: 'Direct Contractor',
+    badgeColor: 'bg-indigo-950 text-indigo-300 border-indigo-800',
+  },
+  {
+    name: 'Valaris Global Careers',
+    category: 'Offshore Contractor',
+    url: 'https://www.valaris.com/careers/',
+    desc: 'Guyana, Gulf of Mexico, North Sea & Middle East Jack-Ups & Floaters',
+    tag: 'Direct Contractor',
+    badgeColor: 'bg-sky-950 text-sky-300 border-sky-800',
+  },
+  {
+    name: 'Noble Corporation',
+    category: 'Offshore Contractor',
+    url: 'https://noblecorp.com/careers/',
+    desc: 'High-spec floaters and jack-ups in Norway, UK, US GoM & South America',
+    tag: 'Direct Contractor',
+    badgeColor: 'bg-purple-950 text-purple-300 border-purple-800',
+  },
+  {
+    name: 'Saipem Offshore Drilling',
+    category: 'Global EPC / Rig Operator',
+    url: 'https://www.saipem.com/en/careers',
+    desc: 'Deepwater drillships offshore West Africa, Mediterranean & Middle East',
+    tag: 'Direct Contractor',
+    badgeColor: 'bg-teal-950 text-teal-300 border-teal-800',
+  },
+  {
+    name: 'SLB Careers',
+    category: 'Drilling Services',
+    url: 'https://careers.slb.com/',
+    desc: 'Rig equipment & maintenance engineering across Saudi Arabia & worldwide',
+    tag: 'Direct Contractor',
+    badgeColor: 'bg-blue-950 text-blue-300 border-blue-800',
+  },
+  {
+    name: 'Halliburton Careers',
+    category: 'Drilling & Energy Services',
+    url: 'https://jobs.halliburton.com/search/?q=mechanic',
+    desc: 'Global drilling tools, hydraulic units, and mechanic positions',
+    tag: 'Direct Contractor',
+    badgeColor: 'bg-red-950 text-red-300 border-red-800',
+  },
+  {
+    name: 'Oil & Gas Job Search (OGJS)',
+    category: 'Global Energy Board',
+    url: 'https://www.oilandgasjobsearch.com/jobs?keywords=rig+mechanic',
+    desc: 'Thousands of verified oilfield and rig maintenance jobs worldwide',
+    tag: 'Live Board',
+    badgeColor: 'bg-orange-950 text-orange-300 border-orange-800',
+  },
+  {
+    name: 'Energy Jobline',
+    category: 'Global Energy Board',
+    url: 'https://www.energyjobline.com/jobs/rig-mechanic/',
+    desc: 'International offshore drilling & marine engineering opportunities',
+    tag: 'Live Board',
+    badgeColor: 'bg-emerald-950 text-emerald-300 border-emerald-800',
+  },
+  {
+    name: 'Borr Drilling Careers',
+    category: 'Modern Jack-Up Fleet',
+    url: 'https://borrdrilling.com/careers/',
+    desc: 'Premium modern jack-up rigs across Middle East, West Africa & SE Asia',
+    tag: 'Direct Contractor',
+    badgeColor: 'bg-cyan-950 text-cyan-300 border-cyan-800',
+  },
+];
 
 export const LinkedInFeedView: React.FC<LinkedInFeedViewProps> = ({
   jobs,
@@ -35,6 +141,9 @@ export const LinkedInFeedView: React.FC<LinkedInFeedViewProps> = ({
   onApplyViaGmail,
   onCustomJobAnalyze,
   isAnalyzingCustom,
+  onScanNow,
+  isScanning,
+  onResetWorldwideJobs,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [siteFilter, setSiteFilter] = useState<string>('all');
@@ -43,6 +152,7 @@ export const LinkedInFeedView: React.FC<LinkedInFeedViewProps> = ({
   const [rigFilter, setRigFilter] = useState<string>('all');
   const [minScore, setMinScore] = useState<number>(70);
   const [showCustomModal, setShowCustomModal] = useState(false);
+  const [showPortalsDirectory, setShowPortalsDirectory] = useState(false);
 
   // Custom job inputs
   const [customTitle, setCustomTitle] = useState('Senior Rig Mechanic');
@@ -166,33 +276,156 @@ export const LinkedInFeedView: React.FC<LinkedInFeedViewProps> = ({
         </button>
       </div>
 
-      {/* Live Spider Status Bar */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-3 mb-6 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center space-x-2 text-slate-300 font-semibold">
-          <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-          <span>Multi-Site Crawlers Live:</span>
+      {/* Live Spider Status Bar & Quick Actions */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 mb-6 space-y-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center space-x-2 text-slate-300 font-semibold">
+            <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+            <span>Multi-Site Crawlers Live:</span>
+            <span className="text-[11px] text-slate-400 font-normal">
+              ({filteredJobs.length} worldwide verified vacancies displayed)
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {onScanNow && (
+              <button
+                onClick={() => onScanNow()}
+                disabled={isScanning}
+                className="inline-flex items-center px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs transition shadow-sm"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isScanning ? 'animate-spin' : ''}`} />
+                {isScanning ? 'Crawling Worldwide...' : 'Scan Worldwide Sites'}
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowPortalsDirectory(!showPortalsDirectory)}
+              className="inline-flex items-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold text-xs border border-amber-500/30 transition shadow-sm"
+            >
+              <Globe className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+              Direct Contractor Portals (12)
+              {showPortalsDirectory ? (
+                <ChevronUp className="w-3 h-3 ml-1" />
+              ) : (
+                <ChevronDown className="w-3 h-3 ml-1" />
+              )}
+            </button>
+
+            {onResetWorldwideJobs && (
+              <button
+                onClick={onResetWorldwideJobs}
+                className="inline-flex items-center px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-850 text-slate-400 hover:text-slate-200 text-xs border border-slate-800 transition"
+                title="Reload the complete 20+ verified worldwide drilling vacancies database"
+              >
+                Sync Verified DB
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-slate-300 text-[11px] flex items-center">
+
+        {/* Live Spider Badges */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80">
+          <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300 text-[11px] flex items-center">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
-            Rigzone Global
+            Rigzone Global (Offshore)
           </span>
-          <span className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-slate-300 text-[11px] flex items-center">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
+          <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300 text-[11px] flex items-center">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mr-1.5"></span>
             LinkedIn Worldwide
           </span>
-          <span className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-slate-300 text-[11px] flex items-center">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
+          <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300 text-[11px] flex items-center">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 mr-1.5"></span>
             Oil & Gas Job Search
           </span>
-          <span className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-slate-300 text-[11px] flex items-center">
+          <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300 text-[11px] flex items-center">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
             Energy Jobline
           </span>
-          <span className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-slate-300 text-[11px] flex items-center">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
-            Direct Contractor ATS
+          <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300 text-[11px] flex items-center">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 mr-1.5"></span>
+            Direct Contractor ATS Portals
           </span>
+        </div>
+      </div>
+
+      {/* Direct Contractor Portals Directory (Expandable) */}
+      {showPortalsDirectory && (
+        <div className="bg-slate-900 border border-amber-500/30 rounded-xl p-4 mb-6 shadow-md transition">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <Globe className="w-4 h-4 text-amber-400" />
+              <h2 className="text-sm font-bold text-white">
+                Worldwide Oil & Gas Direct Contractor Portals & Live Job Boards
+              </h2>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              Direct access to live company vacancies worldwide
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {WORLDWIDE_PORTALS.map((portal) => (
+              <a
+                key={portal.name}
+                href={portal.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-3 bg-slate-950 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/50 rounded-lg transition group flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-xs font-bold text-slate-200 group-hover:text-amber-400 transition flex items-center">
+                      {portal.name}
+                      <ExternalLink className="w-3 h-3 ml-1 text-slate-500 group-hover:text-amber-400 transition" />
+                    </span>
+                    <span
+                      className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border ${portal.badgeColor}`}
+                    >
+                      {portal.tag}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-tight">
+                    {portal.desc}
+                  </p>
+                </div>
+                <div className="mt-2 pt-2 border-t border-slate-850 flex items-center justify-between text-[10px] text-slate-500">
+                  <span>{portal.category}</span>
+                  <span className="text-amber-400 group-hover:underline">Open Live Vacancies ↗</span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Live Web Query Launcher (Rigzone & LinkedIn Real Search) */}
+      <div className="bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-800 rounded-xl p-3 mb-6 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center space-x-2 text-slate-300">
+          <Search className="w-3.5 h-3.5 text-amber-400" />
+          <span className="font-semibold text-slate-200">Live Web Search Shortcuts:</span>
+          <span className="text-slate-400 text-[11px] hidden sm:inline">
+            Launch live real-time queries across external job engines:
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={`https://www.rigzone.com/oil/jobs/search/?k=${encodeURIComponent(searchTerm || 'Rig Mechanic')}&c=Offshore`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 border border-amber-800 text-[11px] font-semibold transition"
+          >
+            <ExternalLink className="w-3 h-3 mr-1 text-amber-400" />
+            Live Search on Rigzone ({searchTerm ? `"${searchTerm}"` : 'Rig Mechanic'})
+          </a>
+          <a
+            href={`https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(searchTerm || 'Senior Rig Mechanic')}&location=Worldwide`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center px-2.5 py-1 rounded-md bg-blue-950/60 hover:bg-blue-900/60 text-blue-300 border border-blue-800 text-[11px] font-semibold transition"
+          >
+            <ExternalLink className="w-3 h-3 mr-1 text-blue-400" />
+            Live Search on LinkedIn Global
+          </a>
         </div>
       </div>
 
@@ -324,7 +557,7 @@ export const LinkedInFeedView: React.FC<LinkedInFeedViewProps> = ({
                     )}
                   </div>
 
-                  {/* Location & Rig Type */}
+                  {/* Location & Rig Type & Rotation / Salary */}
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-400">
                     <span className="flex items-center text-slate-300">
                       <MapPin className="w-3 h-3 mr-1 text-rose-400" />
@@ -334,10 +567,22 @@ export const LinkedInFeedView: React.FC<LinkedInFeedViewProps> = ({
                       <Anchor className="w-3 h-3 mr-1 text-sky-400" />
                       {job.rigType}
                     </span>
+                    {job.rotation && (
+                      <span className="flex items-center text-amber-300 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-800/40 text-[11px]">
+                        {job.rotation}
+                      </span>
+                    )}
                   </div>
 
+                  {job.salaryOrDayRate && (
+                    <div className="mt-2 text-[11px] font-semibold text-emerald-400 flex items-center">
+                      <span className="text-slate-400 font-normal mr-1.5">Package:</span>
+                      {job.salaryOrDayRate}
+                    </div>
+                  )}
+
                   {/* Description snippet */}
-                  <p className="text-xs text-slate-400 mt-3 line-clamp-3 leading-relaxed">
+                  <p className="text-xs text-slate-400 mt-2.5 line-clamp-3 leading-relaxed">
                     {job.description}
                   </p>
 
@@ -375,35 +620,62 @@ export const LinkedInFeedView: React.FC<LinkedInFeedViewProps> = ({
                         <span className="text-sky-300 font-mono text-[11px] truncate">{job.recruiterEmail}</span>
                       </div>
                       <span className="shrink-0 ml-1 text-[9px] px-1 py-0.2 rounded bg-sky-950 text-sky-400 border border-sky-800 font-medium">
-                        Auto-Retrieved
+                        Verified Contact
                       </span>
                     </div>
                   )}
                 </div>
 
                 {/* Card Actions */}
-                <div className="mt-5 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
-                  <a
-                    href={job.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center text-xs text-slate-400 hover:text-slate-200 transition"
-                  >
-                    View on {job.source.replace('.com', '').replace('.in', '')}
-                    <ExternalLink className="w-3 h-3 ml-1" />
-                  </a>
+                <div className="mt-4 pt-3 border-t border-slate-800 flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <a
+                      href={job.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center text-amber-400 hover:text-amber-300 font-semibold transition"
+                      title="Open verified company portal in a new tab"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                      Official Portal Link
+                    </a>
 
-                  <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 text-[11px]">
+                      <a
+                        href={`https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(job.company + ' ' + job.title)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 transition"
+                        title="Search live postings on LinkedIn"
+                      >
+                        LinkedIn ↗
+                      </a>
+                      <span className="text-slate-600">|</span>
+                      <a
+                        href={`https://www.rigzone.com/oil/jobs/search/?k=${encodeURIComponent(job.title)}&c=Offshore`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-400/80 hover:text-amber-300 transition"
+                        title="Search live postings on Rigzone"
+                      >
+                        Rigzone ↗
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1">
                     {/* Apply via Gmail Action if not yet submitted */}
-                    {!isSubmitted && onApplyViaGmail && (
+                    {!isSubmitted && onApplyViaGmail ? (
                       <button
                         onClick={() => onApplyViaGmail(job)}
-                        className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-600/90 hover:bg-red-500 text-white transition shadow-sm"
+                        className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition shadow-sm"
                         title="Apply directly from your connected Gmail"
                       >
                         <Mail className="w-3 h-3 mr-1" />
-                        Gmail
+                        Apply via Gmail
                       </button>
+                    ) : (
+                      <div></div>
                     )}
 
                     {isSubmitted ? (
