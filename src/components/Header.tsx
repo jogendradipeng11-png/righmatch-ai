@@ -96,14 +96,23 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center space-x-1.5 sm:space-x-2.5">
             {/* Gmail Workspace Status Pill */}
             {currentUser ? (
-              <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-red-950/40 border border-red-800/60 text-xs" title={`Connected as ${currentUser.email}`}>
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <Mail className="w-3.5 h-3.5 text-red-400" />
-                <span className="text-slate-200 font-mono text-[11px] max-w-[110px] truncate">{currentUser.email}</span>
+              <div
+                className="flex items-center space-x-1.5 px-2 sm:px-2.5 py-1 rounded-md bg-red-950/40 border border-red-800/60 text-xs cursor-pointer hover:border-red-700/80 transition"
+                title={`Connected as ${currentUser.email}. Click to view status.`}
+                onClick={onConnectGmail}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                <Mail className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                <span className="text-slate-200 font-mono text-[11px] max-w-[85px] sm:max-w-[120px] truncate">
+                  {currentUser.email}
+                </span>
                 <button
-                  onClick={onDisconnectGmail}
-                  className="text-[10px] text-slate-400 hover:text-white underline ml-1"
-                  title="Sign out of Gmail"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDisconnectGmail();
+                  }}
+                  className="text-[10px] text-slate-400 hover:text-white underline ml-0.5 sm:ml-1 shrink-0"
+                  title="Disconnect Gmail"
                 >
                   Disconnect
                 </button>
@@ -111,11 +120,12 @@ export const Header: React.FC<HeaderProps> = ({
             ) : (
               <button
                 onClick={onConnectGmail}
-                className="hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition"
+                className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition shadow-xs"
                 title="Connect Gmail for auto-sending applications"
               >
-                <Mail className="w-3.5 h-3.5 text-red-400" />
-                <span>Connect Gmail</span>
+                <Mail className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                <span className="hidden sm:inline">Connect Gmail</span>
+                <span className="sm:hidden text-[11px]">Gmail</span>
               </button>
             )}
 

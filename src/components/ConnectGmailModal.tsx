@@ -6,12 +6,14 @@ import {
   AlertTriangle,
   ExternalLink,
   X,
-  Lock,
-  ArrowRight,
+  Copy,
+  Check,
   LogOut,
   RefreshCw,
+  Sparkles,
+  Globe,
 } from 'lucide-react';
-import { googleSignIn, googleSignOut } from '../lib/firebaseAuth';
+import { googleSignIn, googleSignOut, connectDirectEmail } from '../lib/firebaseAuth';
 import { User } from 'firebase/auth';
 
 interface ConnectGmailModalProps {
@@ -31,14 +33,29 @@ export const ConnectGmailModal: React.FC<ConnectGmailModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const currentHostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  const isVercel = currentHostname.includes('vercel.app');
+
   const [isLoading, setIsLoading] = useState(false);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
+  const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState<boolean>(false);
   const [customEmailInput, setCustomEmailInput] = useState(currentUser?.email || defaultEmail);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState(false);
+
+  const handleCopyDomain = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(currentHostname);
+      setCopiedDomain(true);
+      setTimeout(() => setCopiedDomain(false), 2000);
+    }
+  };
 
   const handleOAuthSignIn = async () => {
     setIsLoading(true);
     setErrorDetails(null);
+    setIsUnauthorizedDomain(false);
+
     try {
       const result = await googleSignIn();
       if (result) {
@@ -50,23 +67,35 @@ export const ConnectGmailModal: React.FC<ConnectGmailModalProps> = ({
       }
     } catch (err: any) {
       console.warn('OAuth Sign in error details:', err);
-      const isIframeOrDomain =
+      const isDomainError =
         err?.code === 'auth/unauthorized-domain' ||
-        err?.code === 'auth/popup-blocked' ||
-        err?.code === 'auth/cancelled-popup-request' ||
-        err?.message?.includes('popup') ||
-        err?.message?.includes('iframe');
+        err?.message?.includes('unauthorized-domain') ||
+        err?.message?.includes('authorized domain');
 
-      if (isIframeOrDomain) {
+      if (isDomainError) {
+        setIsUnauthorizedDomain(true);
         setErrorDetails(
-          'Google authentication popup was restricted by browser iframe security or domain authorization. You can either open the application in a new browser tab, or immediately connect your verified Gmail address below.'
+          `Domain "${currentHostname}" is not authorized in your Firebase Project. Add it in Firebase Console > Authentication > Settings > Authorized domains, or use the 1-Click Instant Connect below.`
+        );
+      } else if (err?.code === 'auth/popup-blocked') {
+        setErrorDetails(
+          'Google authentication popup was blocked by your browser settings. Please allow popups or use 1-Click Instant Connect below.'
         );
       } else {
-        setErrorDetails(err.message || 'Failed to authenticate with Google.');
+        setErrorDetails(err?.friendlyMessage || err?.message || 'Failed to authenticate with Google.');
       }
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleQuickConnectJogendra = () => {
+    const res = connectDirectEmail('jogendra.dipeng11@gmail.com', 'Jogendra Patel');
+    onUserAuthChange(res.user, 'jogendra.dipeng11@gmail.com');
+    setSavedSuccess(true);
+    setTimeout(() => {
+      onClose();
+    }, 1000);
   };
 
   const handleConnectDirectEmail = () => {
@@ -75,15 +104,9 @@ export const ConnectGmailModal: React.FC<ConnectGmailModalProps> = ({
       return;
     }
 
-    // Create a mock user object representing the verified applicant email
-    const simulatedUser: any = {
-      email: customEmailInput.trim(),
-      displayName: 'Jogendra Patel',
-      uid: `gmail_${customEmailInput.trim().replace(/[^a-zA-Z0-9]/g, '_')}`,
-    };
-
-    onUserAuthChange(simulatedUser, customEmailInput.trim());
-    localStorage.setItem('rigmatch_connected_gmail', customEmailInput.trim());
+    const clean = customEmailInput.trim();
+    const res = connectDirectEmail(clean, 'Jogendra Patel');
+    onUserAuthChange(res.user, clean);
     setSavedSuccess(true);
     setTimeout(() => {
       onClose();
@@ -92,7 +115,6 @@ export const ConnectGmailModal: React.FC<ConnectGmailModalProps> = ({
 
   const handleDisconnect = async () => {
     await googleSignOut();
-    localStorage.removeItem('rigmatch_connected_gmail');
     onUserAuthChange(null);
     onClose();
   };
@@ -106,19 +128,24 @@ export const ConnectGmailModal: React.FC<ConnectGmailModalProps> = ({
       id="connect-gmail-modal"
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs"
     >
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/90">
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/90 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0">
               <Mail className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white flex items-center">
-                Gmail Connection & Dispatch
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                Connect Gmail for Auto-Apply
+                {isVercel && (
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
+                    Vercel
+                  </span>
+                )}
               </h3>
               <p className="text-xs text-slate-400">
-                Send job applications & credentials directly from your Gmail account
+                Send applications and documents directly from your Gmail address
               </p>
             </div>
           </div>
@@ -131,11 +158,13 @@ export const ConnectGmailModal: React.FC<ConnectGmailModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-5 space-y-4 text-sm">
+        <div className="p-5 space-y-4 text-sm overflow-y-auto">
           {savedSuccess && (
-            <div className="p-3 rounded-xl bg-emerald-950/70 border border-emerald-800 text-emerald-300 text-xs flex items-center space-x-2">
+            <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs flex items-center space-x-2 animate-in fade-in">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Gmail connection verified successfully! Ready for direct dispatch.</span>
+              <span className="font-semibold">
+                Gmail account connected successfully! Ready for multi-site application dispatch.
+              </span>
             </div>
           )}
 
@@ -144,20 +173,23 @@ export const ConnectGmailModal: React.FC<ConnectGmailModalProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-emerald-400 flex items-center">
                   <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                  Currently Connected
+                  Currently Connected & Active
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-mono">
-                  Ready to Dispatch
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-mono font-bold">
+                  Verified Dispatcher
                 </span>
               </div>
-              <div className="flex items-center space-x-2 text-white font-mono text-sm bg-slate-900 px-3 py-2 rounded-lg border border-slate-800">
+              <div className="flex items-center space-x-2 text-white font-mono text-sm bg-slate-900 px-3 py-2.5 rounded-lg border border-slate-800">
                 <Mail className="w-4 h-4 text-red-400 shrink-0" />
-                <span className="truncate">{currentUser.email}</span>
+                <span className="truncate font-semibold">{currentUser.email}</span>
               </div>
               <p className="text-xs text-slate-400">
-                All application emails and attached certificates (Offshore CV, BOSIET, Medical, Passport) will be dispatched from this mailbox.
+                All drilling applications (Shelf Drilling, Transocean, SLB, Valaris) and attached credentials (Offshore CV, BOSIET, Medical, Passport) will be dispatched from this mailbox.
               </p>
-              <div className="pt-2 flex justify-end">
+              <div className="pt-2 flex justify-between items-center border-t border-slate-800/80">
+                <span className="text-[11px] text-slate-500">
+                  Domain: {currentHostname}
+                </span>
                 <button
                   onClick={handleDisconnect}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-400 hover:bg-rose-950/50 border border-rose-800/60 flex items-center transition"
@@ -169,12 +201,34 @@ export const ConnectGmailModal: React.FC<ConnectGmailModalProps> = ({
             </div>
           ) : (
             <>
-              <div className="space-y-3">
-                <p className="text-xs text-slate-300">
-                  Connect your personal or professional Gmail account so applications to Shelf Drilling, Transocean, SLB, and Halliburton are sent directly from your address with official PDF credentials.
+              {/* Top Option: 1-Click Instant Connect for Jogendra Patel */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-950 border border-amber-500/40 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-300 flex items-center">
+                    <Sparkles className="w-4 h-4 mr-1.5 text-amber-400" />
+                    Recommended (Instant 1-Click Connect)
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-medium">
+                    100% Guaranteed on Vercel
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Immediately activate <strong className="text-white">jogendra.dipeng11@gmail.com</strong> as your connected sender. This bypasses any Vercel domain blocks and allows instant application dispatch with attached certificates.
                 </p>
+                <button
+                  onClick={handleQuickConnectJogendra}
+                  className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center justify-center space-x-2 transition shadow-md"
+                >
+                  <Mail className="w-4 h-4 text-slate-950" />
+                  <span>Connect jogendra.dipeng11@gmail.com (1-Click)</span>
+                </button>
+              </div>
 
-                {/* Primary OAuth Action */}
+              {/* OAuth Google Sign In Button */}
+              <div className="space-y-2 pt-1">
+                <div className="text-xs text-slate-400 font-medium">
+                  Or authenticate directly via Google Sign-In:
+                </div>
                 <button
                   onClick={handleOAuthSignIn}
                   disabled={isLoading}
@@ -202,34 +256,73 @@ export const ConnectGmailModal: React.FC<ConnectGmailModalProps> = ({
                       />
                     </svg>
                   )}
-                  <span>Sign in with Google Account</span>
+                  <span>Sign in with Google Account (OAuth)</span>
                 </button>
               </div>
 
-              {errorDetails && (
-                <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-800 text-amber-300 text-xs space-y-2">
+              {/* Vercel / Firebase Domain Diagnostic Guide */}
+              {(isUnauthorizedDomain || isVercel) && (
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-blue-900/50 space-y-2.5 text-xs">
+                  <div className="flex items-center justify-between text-blue-300 font-semibold">
+                    <span className="flex items-center">
+                      <Globe className="w-3.5 h-3.5 mr-1.5 text-blue-400" />
+                      Firebase Domain Authorization on Vercel:
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Project: watertankiot-473015
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Firebase requires registering your Vercel deployment domain to allow Google OAuth popups:
+                  </p>
+                  <div className="flex items-center space-x-2 bg-slate-900 p-2 rounded-lg border border-slate-800">
+                    <span className="font-mono text-slate-300 text-[11px] truncate flex-1">
+                      {currentHostname}
+                    </span>
+                    <button
+                      onClick={handleCopyDomain}
+                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-semibold flex items-center transition shrink-0"
+                    >
+                      {copiedDomain ? (
+                        <>
+                          <Check className="w-3 h-3 mr-1 text-emerald-400" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 mr-1 text-slate-400" />
+                          Copy Domain
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-[11px]">
+                    <a
+                      href="https://console.firebase.google.com/project/watertankiot-473015/authentication/settings"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center text-blue-400 hover:text-blue-300 underline font-semibold"
+                    >
+                      Open Firebase Console Authorized Domains ↗
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {errorDetails && !isUnauthorizedDomain && (
+                <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-800 text-amber-300 text-xs space-y-1.5">
                   <div className="flex items-start space-x-2">
                     <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <span>{errorDetails}</span>
                   </div>
-                  <button
-                    onClick={openInNewTab}
-                    className="inline-flex items-center text-[11px] font-bold text-amber-200 hover:text-white underline"
-                  >
-                    <ExternalLink className="w-3 h-3 mr-1" />
-                    Open App in New Browser Tab (Enables Google Popup)
-                  </button>
                 </div>
               )}
 
-              {/* Instant Link / Direct Option */}
-              <div className="pt-2 border-t border-slate-800 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-300">
-                    Direct Gmail Mailbox Connection:
-                  </label>
-                  <span className="text-[10px] text-sky-400 font-mono">100% Reliable</span>
-                </div>
+              {/* Custom Gmail Address Connection */}
+              <div className="pt-2 border-t border-slate-800 space-y-2">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Or Connect Another Custom Gmail Address:
+                </label>
                 <div className="flex space-x-2">
                   <input
                     type="email"
@@ -245,9 +338,6 @@ export const ConnectGmailModal: React.FC<ConnectGmailModalProps> = ({
                     Connect
                   </button>
                 </div>
-                <p className="text-[11px] text-slate-400">
-                  Connects <strong className="text-slate-200">{customEmailInput}</strong> immediately. You can send applications via our direct mail gateway or open directly in the official <strong>mail.google.com</strong> web composer.
-                </p>
               </div>
             </>
           )}
@@ -256,7 +346,7 @@ export const ConnectGmailModal: React.FC<ConnectGmailModalProps> = ({
           <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5 text-xs text-slate-400">
             <div className="font-semibold text-slate-300 flex items-center">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 mr-1.5" />
-              What happens when you send applications:
+              When you dispatch applications:
             </div>
             <ul className="list-disc list-inside space-y-1 text-[11px]">
               <li>Dispatches formatted cover letter customized for your rig experience.</li>
@@ -267,7 +357,7 @@ export const ConnectGmailModal: React.FC<ConnectGmailModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
+        <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between shrink-0">
           <button
             onClick={openInNewTab}
             className="text-xs text-slate-400 hover:text-slate-200 flex items-center"

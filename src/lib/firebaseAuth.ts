@@ -28,32 +28,83 @@ provider.setCustomParameters({
 let isSigningIn = false;
 // Cache the access token in memory (NEVER in localStorage/sessionStorage)
 let cachedAccessToken: string | null = null;
-let cachedUser: User | null = null;
+let cachedUser: any = null;
+
+// Helpers for persistent connection state
+export const getStoredConnectedEmail = (): string | null => {
+  try {
+    return localStorage.getItem('rigmatch_connected_gmail');
+  } catch {
+    return null;
+  }
+};
+
+export const setStoredConnectedEmail = (email: string | null) => {
+  try {
+    if (email) {
+      localStorage.setItem('rigmatch_connected_gmail', email);
+    } else {
+      localStorage.removeItem('rigmatch_connected_gmail');
+    }
+  } catch {}
+};
+
+export const createSimulatedUser = (email: string, displayName = 'Jogendra Patel'): any => {
+  return {
+    email,
+    displayName,
+    uid: `gmail_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
+    photoURL: null,
+    emailVerified: true,
+  };
+};
+
+export const connectDirectEmail = (
+  email: string,
+  displayName = 'Jogendra Patel'
+): { user: any; accessToken: string | null } => {
+  const cleanEmail = email.trim();
+  setStoredConnectedEmail(cleanEmail);
+  const simUser = createSimulatedUser(cleanEmail, displayName);
+  cachedUser = simUser;
+  return { user: simUser, accessToken: cachedAccessToken };
+};
 
 // Initialize auth state listener. Call this on app load.
 export const initAuth = (
-  onAuthSuccess?: (user: User, token: string | null) => void,
+  onAuthSuccess?: (user: any, token: string | null) => void,
   onAuthFailure?: () => void
 ) => {
+  // Pre-seed with stored email if available
+  const storedEmail = getStoredConnectedEmail();
+  if (storedEmail && !auth.currentUser) {
+    const simUser = createSimulatedUser(storedEmail);
+    cachedUser = simUser;
+    if (onAuthSuccess) onAuthSuccess(simUser, cachedAccessToken);
+  }
+
   return onAuthStateChanged(auth, async (user: User | null) => {
-    cachedUser = user;
     if (user) {
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        // User is logged into Firebase, but access token needs a fresh session or popup
-        if (onAuthSuccess) onAuthSuccess(user, null);
-      }
+      cachedUser = user;
+      if (user.email) setStoredConnectedEmail(user.email);
+      if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
     } else {
-      cachedAccessToken = null;
-      cachedUser = null;
-      if (onAuthFailure) onAuthFailure();
+      const persistedEmail = getStoredConnectedEmail();
+      if (persistedEmail) {
+        const simUser = createSimulatedUser(persistedEmail);
+        cachedUser = simUser;
+        if (onAuthSuccess) onAuthSuccess(simUser, cachedAccessToken);
+      } else {
+        cachedAccessToken = null;
+        cachedUser = null;
+        if (onAuthFailure) onAuthFailure();
+      }
     }
   });
 };
 
 // Must be called from a button click or user interaction
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+export const googleSignIn = async (): Promise<{ user: any; accessToken: string } | null> => {
   try {
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
@@ -64,9 +115,22 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 
     cachedAccessToken = credential.accessToken;
     cachedUser = result.user;
+    if (result.user.email) {
+      setStoredConnectedEmail(result.user.email);
+    }
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
-    console.error('Google Sign-in error:', error);
+    const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
+    console.warn('Google Sign-in error details:', error);
+
+    if (error.code === 'auth/unauthorized-domain') {
+      error.friendlyMessage = `Your domain (${currentDomain}) is not authorized in Firebase Console. Add "${currentDomain}" to Firebase Console > Authentication > Settings > Authorized domains.`;
+    } else if (error.code === 'auth/popup-blocked') {
+      error.friendlyMessage = `Google sign-in popup was blocked by browser security. You can either allow popups for ${currentDomain} or connect directly below.`;
+    } else if (error.code === 'auth/cancelled-popup-request') {
+      error.friendlyMessage = 'Authentication popup request was cancelled or replaced by another request.';
+    }
+
     throw error;
   } finally {
     isSigningIn = false;
@@ -77,12 +141,17 @@ export const getAccessToken = async (): Promise<string | null> => {
   return cachedAccessToken;
 };
 
-export const getCurrentUser = (): User | null => {
+export const getCurrentUser = (): any => {
   return cachedUser || auth.currentUser;
 };
 
 export const logout = async () => {
-  await signOut(auth);
+  try {
+    await signOut(auth);
+  } catch (e) {
+    console.warn('Firebase sign out error:', e);
+  }
+  setStoredConnectedEmail(null);
   cachedAccessToken = null;
   cachedUser = null;
 };

@@ -11,12 +11,13 @@ import { NotificationModal } from './components/NotificationModal';
 import { SubmissionProgressModal } from './components/SubmissionProgressModal';
 import { GmailApplicationModal } from './components/GmailApplicationModal';
 import { CandidateProfileModal } from './components/CandidateProfileModal';
+import { ConnectGmailModal } from './components/ConnectGmailModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { INITIAL_USER_PROFILE } from './data/initialProfile';
 import { INITIAL_JOB_LISTINGS } from './data/initialJobs';
 import { JobListing, ApprovalNotification, UserResumeProfile, CandidateDocument } from './types';
 import { playNotificationSound } from './utils/audio';
-import { initAuth, googleSignIn, googleSignOut } from './lib/firebaseAuth';
+import { initAuth, googleSignIn, googleSignOut, getStoredConnectedEmail, createSimulatedUser } from './lib/firebaseAuth';
 import { loadStoredDocuments, saveStoredDocuments } from './lib/documentVault';
 import { User } from 'firebase/auth';
 
@@ -92,7 +93,14 @@ export default function App() {
   const attachedCount = documents.filter((d) => d.includeInApplications).length;
 
   // Gmail & Auth state
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    const stored = getStoredConnectedEmail();
+    if (stored) {
+      return createSimulatedUser(stored);
+    }
+    return null;
+  });
+  const [isConnectGmailModalOpen, setIsConnectGmailModalOpen] = useState(false);
   const [gmailModalJob, setGmailModalJob] = useState<JobListing | null>(null);
 
   // Submission Modal state
@@ -106,19 +114,17 @@ export default function App() {
         setCurrentUser(user);
       },
       () => {
-        setCurrentUser(null);
+        // If not in local storage, clear user
+        if (!getStoredConnectedEmail()) {
+          setCurrentUser(null);
+        }
       }
     );
     return () => unsubscribe();
   }, []);
 
-  const handleConnectGmail = async () => {
-    try {
-      const res = await googleSignIn();
-      if (res) setCurrentUser(res.user);
-    } catch (e) {
-      console.error('Google Sign In failed:', e);
-    }
+  const handleConnectGmail = () => {
+    setIsConnectGmailModalOpen(true);
   };
 
   const handleDisconnectGmail = async () => {
@@ -691,6 +697,20 @@ export default function App() {
         currentUser={currentUser}
         onUserAuthChange={setCurrentUser}
         documents={documents}
+      />
+
+      {/* Connect Gmail & Vercel Domain Diagnostic Modal */}
+      <ConnectGmailModal
+        isOpen={isConnectGmailModalOpen}
+        onClose={() => setIsConnectGmailModalOpen(false)}
+        currentUser={currentUser}
+        onUserAuthChange={(user, customEmail) => {
+          setCurrentUser(user);
+          if (customEmail) {
+            setProfile((prev) => ({ ...prev, email: customEmail }));
+          }
+        }}
+        defaultEmail={profile.email || 'jogendra.dipeng11@gmail.com'}
       />
     </div>
   );
