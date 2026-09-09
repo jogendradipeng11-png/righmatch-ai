@@ -636,24 +636,34 @@ export const PipelineApprovalView: React.FC<PipelineApprovalViewProps> = ({
               </div>
 
               {/* Sticky Action Footer */}
-              <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
+              <div className="p-4 bg-slate-950 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="text-xs text-slate-400">
-                  Clicking approve dispatches application to {selectedJob.company} via LinkedIn.in
+                  Target Recruiter: <span className="font-mono text-sky-400">{selectedJob.recruiterEmail || `${selectedJob.company} Careers`}</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex flex-wrap items-center space-x-2">
                   <button
                     onClick={() => onHoldJob(selectedJob.id)}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 transition"
                   >
                     Hold for Later
                   </button>
+                  {onApplyViaGmail && (
+                    <button
+                      onClick={() => onApplyViaGmail(selectedJob)}
+                      className="flex items-center px-3.5 py-2 rounded-lg font-bold text-xs bg-red-600 hover:bg-red-500 text-white shadow-md transition"
+                      title="Send Job Application via Gmail with 4 Certified PDF attachments"
+                    >
+                      <Mail className="w-3.5 h-3.5 mr-1.5" />
+                      Apply via Gmail (with 4 PDFs)
+                    </button>
+                  )}
                   <button
                     onClick={handleApprove}
                     disabled={isSubmitting}
                     className="flex items-center px-4 py-2 rounded-lg font-bold text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md transition disabled:opacity-50"
                   >
                     <Send className="w-3.5 h-3.5 mr-1.5" />
-                    Approve & Auto-Submit Application
+                    Approve & Auto-Submit
                   </button>
                 </div>
               </div>

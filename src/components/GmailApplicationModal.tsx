@@ -18,7 +18,13 @@ import {
 import { JobListing, UserResumeProfile, CandidateDocument } from '../types';
 import { sendJobApplicationViaGmail } from '../lib/gmailService';
 import { googleSignIn, getAccessToken } from '../lib/firebaseAuth';
-import { loadStoredDocuments, prepareEmailAttachments, formatBytes } from '../lib/documentVault';
+import {
+  loadStoredDocuments,
+  prepareEmailAttachments,
+  formatBytes,
+  downloadDocumentFile,
+  downloadAllDocuments,
+} from '../lib/documentVault';
 import { User } from 'firebase/auth';
 
 interface GmailApplicationModalProps {
@@ -53,6 +59,7 @@ export const GmailApplicationModal: React.FC<GmailApplicationModalProps> = ({
   const [sentSuccess, setSentSuccess] = useState<boolean>(false);
   const [sentAttachmentNames, setSentAttachmentNames] = useState<string[]>([]);
   const [showDocSelector, setShowDocSelector] = useState<boolean>(true);
+  const [hasDownloadedFiles, setHasDownloadedFiles] = useState<boolean>(false);
 
   // Load available documents from props or local storage
   const availableDocs = propDocs && propDocs.length > 0 ? propDocs : loadStoredDocuments(profile);
@@ -67,8 +74,8 @@ export const GmailApplicationModal: React.FC<GmailApplicationModalProps> = ({
     }
   }, [job]);
 
-  const applicantEmail = currentUser?.email || profile.email || 'candidate@gmail.com';
-  const applicantName = profile.fullName || 'Rig Candidate';
+  const applicantEmail = currentUser?.email || profile.email || 'jogendra.dipeng11@gmail.com';
+  const applicantName = profile.fullName || 'Jogendra Patel';
   const primaryCert = profile.certifications?.[0]?.name || 'BOSIET / Offshore Verified';
   const subject = `Job Application: ${job.title} - ${applicantName} (${profile.totalExperienceYears}+ Yrs Exp - ${primaryCert.split('(')[0].trim()})`;
 
@@ -100,6 +107,10 @@ export const GmailApplicationModal: React.FC<GmailApplicationModalProps> = ({
   };
 
   const handleOpenInGmailWeb = () => {
+    // 1. Immediately download all selected PDF files to user's computer/phone
+    downloadAllDocuments(selectedDocs);
+    setHasDownloadedFiles(true);
+
     const docListString = selectedDocs.length > 0
       ? `\n\nATTACHED CREDENTIAL DOCUMENTS (${selectedDocs.length}):\n` +
         selectedDocs.map((d, i) => `[${i + 1}] ${d.filename} (${d.name})`).join('\n')
@@ -134,23 +145,20 @@ export const GmailApplicationModal: React.FC<GmailApplicationModalProps> = ({
         sentAt: new Date().toISOString(),
       });
       onClose();
-    }, 1500);
+    }, 2500);
   };
 
   const handleDownloadAttachment = (doc: CandidateDocument) => {
-    try {
-      const dataUri = doc.base64Data?.startsWith('data:')
-        ? doc.base64Data
-        : `data:${doc.fileType || 'application/pdf'};base64,${doc.base64Data}`;
-      const link = document.createElement('a');
-      link.href = dataUri;
-      link.download = doc.filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (e) {
-      console.error('Download error:', e);
-    }
+    downloadDocumentFile(doc);
+  };
+
+  const handleDownloadAll = () => {
+    downloadAllDocuments(selectedDocs);
+    setHasDownloadedFiles(true);
+  };
+
+  const handleSendTestToSelf = () => {
+    setRecipient(applicantEmail);
   };
 
   const handleConfirmSend = async () => {
@@ -314,6 +322,24 @@ export const GmailApplicationModal: React.FC<GmailApplicationModalProps> = ({
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-1 focus:ring-amber-500 focus:border-amber-500"
                   placeholder="recruiter@company.com"
                 />
+                <div className="flex items-center space-x-2 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={handleSendTestToSelf}
+                    className="text-[11px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-medium transition"
+                  >
+                    ✉️ Send test copy to my Gmail ({applicantEmail})
+                  </button>
+                  {job.recruiterEmail && recipient !== job.recruiterEmail && (
+                    <button
+                      type="button"
+                      onClick={() => setRecipient(job.recruiterEmail || defaultRecipient)}
+                      className="text-[11px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium transition"
+                    >
+                      ↺ Reset to {job.company} Recruiter
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Subject Line */}
@@ -405,25 +431,47 @@ export const GmailApplicationModal: React.FC<GmailApplicationModalProps> = ({
                       })}
                     </div>
 
-                    <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400">
+                    <div className="flex flex-wrap items-center justify-between pt-1 gap-2 text-[11px] text-slate-400">
+                      <div className="flex items-center space-x-3">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDocIds(availableDocs.map((d) => d.id))}
+                          className="text-amber-400 hover:text-amber-300 font-medium"
+                        >
+                          Select All ({availableDocs.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDocIds([])}
+                          className="text-slate-400 hover:text-slate-200"
+                        >
+                          Deselect All
+                        </button>
+                      </div>
+
                       <button
                         type="button"
-                        onClick={() => setSelectedDocIds(availableDocs.map((d) => d.id))}
-                        className="text-amber-400 hover:text-amber-300 font-medium"
+                        onClick={handleDownloadAll}
+                        className="flex items-center px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40 font-bold transition"
+                        title="Download these certified PDF files to your computer or phone"
                       >
-                        Select All Documents
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedDocIds([])}
-                        className="text-slate-400 hover:text-slate-200"
-                      >
-                        Deselect All
+                        <Download className="w-3.5 h-3.5 mr-1 text-amber-400" />
+                        Download All {selectedDocs.length} Verified PDFs
                       </button>
                     </div>
                   </div>
                 )}
               </div>
+
+              {hasDownloadedFiles && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-start space-x-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-white">Certificates Downloaded to Your Device:</span>{' '}
+                    All <strong>{selectedDocs.length} certified PDF documents</strong> are saved in your Downloads folder. In your opened Gmail window, simply drag them into the compose window or click the <strong>📎 Paperclip icon</strong> to attach them!
+                  </div>
+                </div>
+              )}
 
               {/* Cover Letter Body */}
               <div>

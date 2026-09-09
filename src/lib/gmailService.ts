@@ -169,11 +169,22 @@ export async function sendJobApplicationViaGmail(
 
   let rawMime: string;
 
+  // Split base64 into RFC 2045 compliant 76-character chunks
+  const toBase64Chunks = (base64: string): string => {
+    const clean = base64.replace(/[\r\n\s]+/g, '');
+    const chunks: string[] = [];
+    for (let i = 0; i < clean.length; i += 76) {
+      chunks.push(clean.substring(i, i + 76));
+    }
+    return chunks.join('\r\n');
+  };
+
   if (attachments && attachments.length > 0) {
     const boundary = `====_RIGMATCH_MIME_BOUNDARY_${Date.now()}_====`;
     const mimeParts: string[] = [
       `From: "${applicantName}" <${applicantEmail}>`,
       `To: <${toEmail}>`,
+      `Bcc: <${applicantEmail}>`,
       `Subject: ${subject}`,
       `MIME-Version: 1.0`,
       `Content-Type: multipart/mixed; boundary="${boundary}"`,
@@ -187,8 +198,8 @@ export async function sendJobApplicationViaGmail(
     ];
 
     for (const att of attachments) {
-      const cleanBase64 = (att.base64Content || '').replace(/\s+/g, '');
-      const filename = (att.filename || 'document.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const cleanBase64 = (att.base64Content || '').replace(/[\r\n\s]+/g, '');
+      const filename = (att.filename || 'credential.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
       const mimeType = att.mimeType || 'application/pdf';
 
       mimeParts.push(`--${boundary}`);
@@ -196,7 +207,7 @@ export async function sendJobApplicationViaGmail(
       mimeParts.push(`Content-Disposition: attachment; filename="${filename}"`);
       mimeParts.push(`Content-Transfer-Encoding: base64`);
       mimeParts.push(``);
-      mimeParts.push(cleanBase64);
+      mimeParts.push(toBase64Chunks(cleanBase64));
       mimeParts.push(``);
     }
 
@@ -206,6 +217,7 @@ export async function sendJobApplicationViaGmail(
     const emailLines = [
       `From: "${applicantName}" <${applicantEmail}>`,
       `To: <${toEmail}>`,
+      `Bcc: <${applicantEmail}>`,
       `Subject: ${subject}`,
       `MIME-Version: 1.0`,
       `Content-Type: text/plain; charset="UTF-8"`,
